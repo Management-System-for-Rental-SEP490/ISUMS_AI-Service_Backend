@@ -7,25 +7,25 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ModelKeyResolver {
 
-    public static String lastestKey(String prefix, UUID houseId, UUID areaId) {
-        if (areaId != null) {
-            return "%s/house_%s/area_%s/latest.json".formatted(prefix, houseId, areaId);
-        }
-
-        return "%s/house_%s/latest.json".formatted(prefix, houseId);
+    public static String latestKey(String prefix, String houseId, String areaId, String stream) {
+        return scopePath(prefix, houseId, areaId)
+                + "/" + stream + "/latest.json";
     }
 
-    public static String metaKey(String prefix, UUID houseId, UUID areaId, String version) {
-        if (areaId != null) {
-            return "%s/house_%s/area_%s/%s/meta.json".formatted(prefix, houseId, areaId, version);
-        }
-        return "%s/house_%s/%s/meta.json".formatted(prefix, houseId, version);
+    public static String metaKey(String prefix, String houseId, String areaId, String stream, String version) {
+        return scopePath(prefix, houseId, areaId)
+                + "/" + stream + "/" + version + "/meta.json";
     }
 
-    public static String mojoKey(String prefix, UUID houseId, UUID areaId, String version) {
-        if (areaId != null) {
-            return "%s/house_%s/area_%s/%s/model.mojo".formatted(prefix, houseId, areaId, version);
-        }
-        return "%s/house_%s/%s/model.mojo".formatted(prefix, houseId, version);
+    public static String mojoKey(String prefix, String houseId, String areaId, String stream, String version) {
+        return scopePath(prefix, houseId, areaId)
+                + "/" + stream + "/" + version + "/model.mojo";
+    }
+
+    private static String scopePath(String prefix, String houseId, String areaId) {
+        String scope = (areaId == null || areaId.isBlank())
+                ? "house_" + houseId
+                : "house_" + houseId + "/area_" + areaId;
+        return prefix.stripTrailing() + "/" + scope;
     }
 }
