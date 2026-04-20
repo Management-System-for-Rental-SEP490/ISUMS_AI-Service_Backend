@@ -1,11 +1,15 @@
 package com.isums.aiservice.infrastructures.listeners;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.isums.aiservice.domains.dtos.CustomerFacingPolishResult;
 import com.isums.aiservice.domains.dtos.IssueTextTranslationRequestedEvent;
 import com.isums.aiservice.domains.dtos.TextTranslationResult;
+import com.isums.aiservice.domains.dtos.TranslationPolicy;
 import com.isums.aiservice.infrastructures.abstracts.TextTranslationService;
 import com.isums.aiservice.infrastructures.kafka.IssueTextTranslationResultProducer;
+import com.isums.aiservice.services.CustomerFacingTranslationPolisher;
 import com.isums.aiservice.services.IssueTranslationPostProcessor;
+import com.isums.aiservice.services.TranslationPolicyResolver;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +33,8 @@ class IssueTextTranslationListenerTest {
 
     @Mock private TextTranslationService textTranslationService;
     @Mock private IssueTextTranslationResultProducer resultProducer;
+    @Mock private TranslationPolicyResolver translationPolicyResolver;
+    @Mock private CustomerFacingTranslationPolisher customerFacingTranslationPolisher;
     @Mock private Acknowledgment acknowledgment;
 
     @Test
@@ -38,21 +45,30 @@ class IssueTextTranslationListenerTest {
                 objectMapper,
                 textTranslationService,
                 resultProducer,
+                translationPolicyResolver,
+                customerFacingTranslationPolisher,
                 new IssueTranslationPostProcessor()
         );
 
         UUID resourceId = UUID.randomUUID();
         UUID requestId = UUID.randomUUID();
-        when(textTranslationService.translate("Tôi đã kiểm tra, vui lòng xác nhận để tiến hành sửa chữa", null, "ja"))
-                .thenReturn(new TextTranslationResult("vi", "ja", "確認しました。確認して修理を続行してください", "aws-translate", "DONE"));
+        TranslationPolicy policy = new TranslationPolicy(true, true, true, java.util.List.of());
+
+        when(translationPolicyResolver.resolve(any())).thenReturn(policy);
+        when(textTranslationService.translate(any(), any(), any(), eq(policy)))
+                .thenReturn(new TextTranslationResult("vi", "ja", "確認しました。確認して修理を続行してください", "aws-translate+formal", "DONE"));
+        when(customerFacingTranslationPolisher.polish(any(), any(), any(), eq(policy)))
+                .thenReturn(new CustomerFacingPolishResult("確認いたしました。修理を進めるため、ご確認をお願いいたします。", true));
 
         String payload = objectMapper.writeValueAsString(new IssueTextTranslationRequestedEvent(
                 requestId,
-                "EXECUTION",
+                "RESPONSE",
                 resourceId,
                 "Tôi đã kiểm tra, vui lòng xác nhận để tiến hành sửa chữa",
                 null,
                 "ja",
+                "QUESTION_RESPONSE",
+                true,
                 Instant.now()
         ));
 
@@ -64,6 +80,7 @@ class IssueTextTranslationListenerTest {
         assertThat(cap.getValue().resourceId()).isEqualTo(resourceId);
         assertThat(cap.getValue().targetLanguage()).isEqualTo("ja");
         assertThat(cap.getValue().translatedText()).isEqualTo("確認いたしました。修理を進めるため、ご確認をお願いいたします。");
+        assertThat(cap.getValue().provider()).contains("bedrock-polish");
         assertThat(cap.getValue().status()).isEqualTo("DONE");
         verify(acknowledgment).acknowledge();
     }

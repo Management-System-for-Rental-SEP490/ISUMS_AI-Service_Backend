@@ -3,9 +3,12 @@ package com.isums.aiservice.infrastructures.listeners;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.isums.aiservice.domains.dtos.IssueTextTranslationRequestedEvent;
 import com.isums.aiservice.domains.dtos.IssueTextTranslationResultEvent;
+import com.isums.aiservice.domains.dtos.TranslationRequestContext;
 import com.isums.aiservice.infrastructures.abstracts.TextTranslationService;
 import com.isums.aiservice.infrastructures.kafka.IssueTextTranslationResultProducer;
+import com.isums.aiservice.services.CustomerFacingTranslationPolisher;
 import com.isums.aiservice.services.IssueTranslationPostProcessor;
+import com.isums.aiservice.services.TranslationPolicyResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -22,19 +25,34 @@ public class IssueTextTranslationListener {
     private final ObjectMapper objectMapper;
     private final TextTranslationService textTranslationService;
     private final IssueTextTranslationResultProducer resultProducer;
+    private final TranslationPolicyResolver translationPolicyResolver;
+    private final CustomerFacingTranslationPolisher customerFacingTranslationPolisher;
     private final IssueTranslationPostProcessor postProcessor;
 
     @KafkaListener(topics = "issue.text.translation.requested", groupId = "ai-translation-group")
     public void onRequested(String payload, Acknowledgment acknowledgment) {
         try {
             IssueTextTranslationRequestedEvent event = objectMapper.readValue(payload, IssueTextTranslationRequestedEvent.class);
-            var translated = textTranslationService.translate(event.text(), event.sourceLanguage(), event.targetLanguage());
-            String refinedText = postProcessor.refine(
+            TranslationRequestContext context = new TranslationRequestContext(
+                    event.resourceType(),
+                    event.translationIntent(),
+                    Boolean.TRUE.equals(event.customerFacing()),
+                    event.sourceLanguage(),
+                    event.targetLanguage()
+            );
+            var policy = translationPolicyResolver.resolve(context);
+            var translated = textTranslationService.translate(event.text(), event.sourceLanguage(), event.targetLanguage(), policy);
+            var polishResult = customerFacingTranslationPolisher.polish(
                     event.text(),
                     translated.translatedText(),
-                    translated.sourceLanguage(),
-                    translated.targetLanguage()
+                    context,
+                    policy
             );
+            String refinedText = postProcessor.refine(polishResult.text(), context, policy);
+            String provider = translated.provider();
+            if (polishResult.usedBedrock()) {
+                provider = provider + "+bedrock-polish";
+            }
 
             resultProducer.send(IssueTextTranslationResultEvent.builder()
                     .requestId(event.requestId())
@@ -43,7 +61,7 @@ public class IssueTextTranslationListener {
                     .sourceLanguage(translated.sourceLanguage())
                     .targetLanguage(translated.targetLanguage())
                     .translatedText(refinedText)
-                    .provider(translated.provider())
+                    .provider(provider)
                     .status(translated.status())
                     .translatedAt(Instant.now())
                     .build());
