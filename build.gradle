@@ -51,7 +51,9 @@ dependencies {
     implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'com.isums:isums-observability-common:1.0-SNAPSHOT'
+    implementation "com.isums:proto-common:1.0-SNAPSHOT"
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-kafka'
     implementation 'software.amazon.awssdk:s3:2.41.31'
     implementation 'software.amazon.awssdk:translate:2.41.31'
@@ -74,4 +76,9 @@ dependencyManagement {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
 }

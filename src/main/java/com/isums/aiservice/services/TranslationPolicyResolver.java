@@ -18,37 +18,51 @@ public class TranslationPolicyResolver {
             "nl", "fr", "fr-ca", "de", "hi", "it", "ja", "ko", "pt-pt", "es", "es-mx"
     );
 
+    private static final Set<String> CUSTOMER_FACING_INTENTS = Set.of(
+            "CUSTOMER_FACING_UI",
+            "CUSTOMER_REPLY",
+            "TENANT_REPLY",
+            "QUESTION_RESPONSE",
+            "APPROVAL_REQUEST"
+    );
+
+    private static final String INTENT_LEGAL = "LEGAL_REFERENCE";
+
     private final TranslationProperties translationProperties;
     private final TranslationLocaleSupport localeSupport;
 
     public TranslationPolicy resolve(TranslationRequestContext context) {
         String normalizedTarget = localeSupport.normalize(context.targetLanguage());
-        boolean customerFacing = context.customerFacing() || isCustomerFacingIntent(context.translationIntent());
+        String intent = normalizeIntent(context.translationIntent());
+        boolean legalIntent = INTENT_LEGAL.equals(intent);
+
+        boolean customerFacing = !legalIntent
+                && (context.customerFacing() || CUSTOMER_FACING_INTENTS.contains(intent));
+
         boolean formalRequested = customerFacing
                 && normalizedTarget != null
                 && FORMALITY_SUPPORTED_TARGETS.contains(normalizedTarget.toLowerCase(Locale.ROOT));
 
+        boolean bedrockPolish = customerFacing
+                && !legalIntent
+                && translationProperties.getCustomerFacing().isBedrockEnabled();
+
         List<String> terminologyNames = translationProperties.getTerminologyNames() == null
                 ? List.of()
                 : translationProperties.getTerminologyNames().stream()
-                .filter(name -> name != null && !name.isBlank())
-                .toList();
+                    .filter(name -> name != null && !name.isBlank())
+                    .toList();
 
         return new TranslationPolicy(
                 customerFacing,
                 formalRequested,
-                customerFacing && translationProperties.getCustomerFacing().isBedrockEnabled(),
+                bedrockPolish,
                 terminologyNames
         );
     }
 
-    private boolean isCustomerFacingIntent(String translationIntent) {
-        if (translationIntent == null || translationIntent.isBlank()) {
-            return false;
-        }
-        return switch (translationIntent.trim().toUpperCase(Locale.ROOT)) {
-            case "QUESTION_RESPONSE", "CUSTOMER_REPLY", "TENANT_REPLY", "APPROVAL_REQUEST" -> true;
-            default -> false;
-        };
+    private static String normalizeIntent(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        return raw.trim().toUpperCase(Locale.ROOT);
     }
 }
