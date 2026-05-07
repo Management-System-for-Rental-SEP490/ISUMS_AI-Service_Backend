@@ -72,6 +72,19 @@ public class TranslationOrchestrator {
         String normalizedTarget = localeSupport.normalize(targetLanguage);
         boolean customerFacingFlag = Boolean.TRUE.equals(customerFacing);
 
+        if (normalizedSource != null
+                && normalizedTarget != null
+                && normalizedSource.equals(normalizedTarget)) {
+            incrementRequest(resourceType, normalizedTarget, "SKIPPED", "skip");
+            return new TranslationOutcome(
+                    normalizedSource,
+                    normalizedTarget,
+                    text,
+                    "noop-same-language",
+                    "SKIPPED",
+                    "source equals target");
+        }
+
         TranslationOutcome cached = cache.getIfPresent(
                 text, normalizedSource, normalizedTarget, intent, customerFacingFlag);
         if (cached != null) {

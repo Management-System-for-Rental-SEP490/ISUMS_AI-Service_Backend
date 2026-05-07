@@ -37,6 +37,12 @@ public class CustomerFacingTranslationPolisher {
             return new CustomerFacingPolishResult(candidateTranslation, false);
         }
 
+        String src = context.sourceLanguage() == null ? "" : context.sourceLanguage().trim().toLowerCase(Locale.ROOT);
+        String tgt = context.targetLanguage() == null ? "" : context.targetLanguage().trim().toLowerCase(Locale.ROOT);
+        if (!src.isEmpty() && src.equals(tgt)) {
+            return new CustomerFacingPolishResult(candidateTranslation, false);
+        }
+
         try {
             Message message = Message.builder()
                     .role(ConversationRole.USER)
@@ -80,9 +86,20 @@ Rules:
 2. Preserve exact business meaning, requested action, nouns, verbs, and factual scope.
 3. Do not add promises, deadlines, apologies, blame, workflow terms, or new facts.
 4. Do not replace nouns or actions with different ones unless the source text explicitly contains them.
-5. Keep domain terms stable: tenant, landlord, manager, issue, inspection, repair, contract.
-6. Make the smallest possible edits needed for a polite customer-facing result.
-7. Return only the final translated text. No notes, no JSON, no quotes.
+5. Keep domain terms stable in any language. Equivalences (do NOT swap across rows):
+   - tenant ↔ khách thuê ↔ テナント
+   - landlord ↔ chủ nhà ↔ 家主
+   - manager ↔ quản lý ↔ 管理者
+   - issue ↔ sự cố ↔ 問題
+   - inspection ↔ kiểm tra ↔ 検査
+   - repair ↔ sửa chữa ↔ 修理
+   - contract ↔ hợp đồng ↔ 契約
+   Never replace "khách thuê" with "khách sạn" (hotel) — they are different concepts.
+6. Preserve proper nouns and Vietnam-specific abbreviations exactly: CCCD, CMND, EVN, VNPT, VND, OTP, SSO.
+7. Preserve any token matching the patterns EContract_*, /contracts/*, #XXXXXXXX, dates, numbers, and email addresses character-for-character.
+8. Make the smallest possible edits needed for a polite customer-facing result.
+9. If the candidate translation already differs in core nouns from the source text, restore the source's nouns. Do not invent new ones.
+10. Return only the final translated text. No notes, no JSON, no quotes.
 """);
 
         String targetLanguage = context.targetLanguage() == null ? "" : context.targetLanguage().trim().toLowerCase(Locale.ROOT);
@@ -106,6 +123,19 @@ English style guide:
 Example:
 Candidate: I have checked, please confirm to proceed with repair.
 Final: I have checked it. Please confirm so we can proceed with the repair.
+""");
+        } else if ("vi".equals(targetLanguage)) {
+            prompt.append("""
+Vietnamese style guide:
+- Use polite customer-service register, modern Vietnamese.
+- Keep these terms unchanged: khách thuê, chủ nhà, quản lý, sự cố, kiểm tra, sửa chữa, hợp đồng, CCCD, CMND, EVN, VNPT, VND, OTP.
+- Do NOT change "khách thuê" to "khách sạn", "khách hàng", or any other noun.
+- Do NOT split or alter compound nouns like "Hợp đồng" — keep both syllables.
+
+Example:
+Candidate: Khách sạn đã xác nhận CCCD
+Source: Khách thuê đã xác nhận CCCD
+Final: Khách thuê đã xác nhận CCCD
 """);
         }
 
