@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/scoring")
+@RequestMapping("/api/ai/scoring")
 @RequiredArgsConstructor
 public class ScoringController {
 
